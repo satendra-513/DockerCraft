@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DockerCraft - AI-Powered Containerization Engine</title>
+    <link rel="stylesheet" href="./src/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="glass-panel">
+            <div class="logo-container">
+                <div class="logo-icon">DC</div>
+                <h1 class="logo-text">DockerCraft</h1>
+            </div>
+            <div id="connection-badge" class="api-badge disconnected">
+                <span class="badge-dot"></span>
+                <span id="connection-status-text">OFFLINE</span>
+            </div>
+        </header>
+
+        <!-- Repository Submission Form -->
+        <section class="repo-form-panel glass-panel">
+            <div class="form-group">
+                <div class="input-container">
+                    <span class="input-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
+                    </span>
+                    <input type="text" id="repo-url-input" class="url-input" placeholder="Enter GitHub Repository URL (e.g. https://github.com/expressjs/express.git)" value="https://github.com/pallets/flask.git">
+                </div>
+                <button id="submit-btn" class="btn-primary">
+                    <span>Build Container</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </div>
+        </section>
+
+        <!-- Stepper Visualization -->
+        <section class="stepper-panel glass-panel">
+            <div class="stepper-container">
+                <div class="stepper-line-bg"></div>
+                <div id="stepper-line-progress" class="stepper-line-progress"></div>
+                
+                <div class="step-item" id="step-cloning">
+                    <div class="step-node">1</div>
+                    <div class="step-label">Cloning</div>
+                </div>
+                <div class="step-item" id="step-analyzing">
+                    <div class="step-node">2</div>
+                    <div class="step-label">Analyzing</div>
+                </div>
+                <div class="step-item" id="step-generating">
+                    <div class="step-node">3</div>
+                    <div class="step-label">Generating</div>
+                </div>
+                <div class="step-item" id="step-building">
+                    <div class="step-node">4</div>
+                    <div class="step-label">Building</div>
+                </div>
+                <div class="step-item" id="step-verifying">
+                    <div class="step-node">5</div>
+                    <div class="step-label">Verifying</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Workspace (Editor + Console Split) -->
+        <div class="workspace-grid">
+            <!-- Left Pane: Dockerfile Editor -->
+            <section class="workspace-panel glass-panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        <span>Interactive Dockerfile Editor</span>
+                    </div>
+                    <div class="dot-controls">
+                        <div class="dot red"></div>
+                        <div class="dot yellow"></div>
+                        <div class="dot green"></div>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <textarea id="dockerfile-editor" class="editor-textarea" placeholder="# Generated Dockerfile will appear here...&#10;# You can edit it manually and rebuild." spellcheck="false"></textarea>
+                </div>
+                <div class="editor-footer">
+                    <div class="config-row">
+                        <label for="container-port" class="meta-label">Port:</label>
+                        <input type="number" id="container-port" class="config-input" value="8080" placeholder="Port">
+                    </div>
+                    <button id="rebuild-btn" class="btn-secondary" disabled>Re-Build & Verify</button>
+                </div>
+            </section>
+
+            <!-- Right Pane: Console Terminal -->
+            <section class="workspace-panel glass-panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                        <span>Live Pipeline Terminal</span>
+                    </div>
+                    <button id="clear-console-btn" class="btn-secondary" style="padding: 4px 8px; font-size: 11px;">Clear</button>
+                </div>
+                <div id="console" class="panel-body console-body">
+                    <div class="console-line system">Terminal ready. Submit a Git repository to begin the process.</div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Metadata Summary Cards -->
+        <section class="meta-panel glass-panel">
+            <div class="meta-card">
+                <div class="meta-label">Detected Language</div>
+                <div id="meta-lang" class="meta-value">-</div>
+            </div>
+            <div class="meta-card">
+                <div class="meta-label">Framework</div>
+                <div id="meta-framework" class="meta-value">-</div>
+            </div>
+            <div class="meta-card">
+                <div class="meta-label">Package Manager</div>
+                <div id="meta-manager" class="meta-value">-</div>
+            </div>
+            <div class="meta-card">
+                <div class="meta-label">Active State</div>
+                <div id="meta-state" class="meta-value" style="color: var(--color-teal);">IDLE</div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Alert Popup -->
+    <div id="alert-popup" class="alert-popup">
+        <div id="alert-message">Pipeline starting...</div>
+    </div>
+
+    <!-- Script Entrypoint -->
+    <script type="module" src="./src/main.js"></script>
+</body>
+</html>
