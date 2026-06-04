@@ -130,3 +130,23 @@ The application will be served at `http://localhost:8000`.
    * **Building:** Streams compiler logs chunk-by-chunk in real-time. If it fails, the **Debugger Agent** starts self-correcting.
    * **Verifying:** The built container starts in detached mode on an ephemeral port. It stays active for 5 seconds to inspect runtime stability, prints its startup logs to the screen, stops, and clears the container.
 5. If the build finishes, you can edit the Dockerfile in the **Interactive Dockerfile Editor** pane, adjust the mapped port, and click **Re-Build & Verify** to instantly verify your customized changes!
+
+---
+
+## 🧠 LLM Choice & Rationale
+
+DockerCraft uses the **Groq API** running the **Llama-3.3-70b-versatile** model for agent reasoning, Dockerfile generation, and build error debugging:
+
+*   **Ultra-low Latency (Speed):** Groq provides blazing-fast inference speeds (exceeding 300 tokens/sec). This is crucial for our real-time WebSocket dashboard, allowing the generation and debugging explanations to stream back without delay.
+*   **70B Parameter Capacity:** Llama 3.3 70B possesses strong code-understanding capabilities. It excels at parsing complex dependency configurations and generating correct multi-stage build scripts.
+*   **JSON-Mode Reliability:** The model has excellent support for structured JSON outputs, allowing DockerCraft to reliably deserialize backend agents' outputs directly into Pydantic validation schemas.
+*   **Zero-Config Rule Fallback:** If no `GROQ_API_KEY` is provided, DockerCraft seamlessly falls back to a rule-based generator, allowing full application usage even offline.
+
+---
+
+## ⚠️ Known Limitations & Edge Cases
+
+*   **Docker Daemon Requirement:** The backend connects to the host machine's Docker daemon. If Docker Desktop is stopped or socket permission is denied, the application will display a connection error.
+*   **Public Repository Constraint:** Repository URLs must be publicly accessible. Private Git repositories requiring SSH/credentials are not supported out-of-the-box.
+*   **Monorepo Support:** The default analyzer expects configuration files (`package.json`, `requirements.txt`) at the repository root. For nested sub-directories or monorepos, the generation may require manual configuration adjustments in the dashboard editor.
+*   **Groq API Rate Limits:** The free tier of the Groq API can trigger rate limit exceptions during aggressive self-correction loops.
