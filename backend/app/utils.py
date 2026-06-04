@@ -36,13 +36,19 @@ def clone_repository(repo_url: str, dest_path: str) -> str:
             try:
                 shutil.rmtree(dest_path, onexc=_force_remove_readonly)
             except Exception:
-                # Attempt 3: OS-level forced removal (Windows)
+                # Attempt 3: OS-level forced removal
                 logger.warning("Falling back to OS-level removal...")
                 try:
-                    subprocess.run(
-                        ["cmd", "/c", "rmdir", "/s", "/q", dest_path],
-                        check=True, capture_output=True, timeout=15
-                    )
+                    if os.name == 'nt':
+                        subprocess.run(
+                            ["cmd", "/c", "rmdir", "/s", "/q", dest_path],
+                            check=True, capture_output=True, timeout=15
+                        )
+                    else:
+                        subprocess.run(
+                            ["rm", "-rf", dest_path],
+                            check=True, capture_output=True, timeout=15
+                        )
                 except Exception as e2:
                     raise RuntimeError(
                         f"Failed to clean up existing directory '{dest_path}': {e2}"
