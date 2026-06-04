@@ -1,8 +1,14 @@
 import os
+import stat
 import shutil
 import hashlib
+import subprocess
+import time
+import logging
 from typing import Dict, List
 import git
+
+logger = logging.getLogger("dockercraft.utils")
 
 def get_repo_temp_path(repo_url: str) -> str:
     """Generate a unique temporary path for a repository URL."""
@@ -12,15 +18,36 @@ def get_repo_temp_path(repo_url: str) -> str:
     os.makedirs(base_temp, exist_ok=True)
     return os.path.join(base_temp, folder_name)
 
+def _force_remove_readonly(func, path, exc_info):
+    """Handle read-only files (common in .git directories on Windows)."""
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
 def clone_repository(repo_url: str, dest_path: str) -> str:
     """Clones a git repository with depth=1. If folder exists, removes it first."""
     if os.path.exists(dest_path):
+        # Attempt 1: shutil.rmtree with read-only file handler
         try:
-            shutil.rmtree(dest_path, onexc=lambda func, path, exc_info: os.chmod(path, 0o777) or shutil.rmtree(path))
-        except Exception:
-            # Fallback if shutil fails due to open handles or git locks
-            pass
-            
+            shutil.rmtree(dest_path, onexc=_force_remove_readonly)
+        except Exception as e:
+            logger.warning(f"shutil.rmtree failed: {e}. Retrying after brief delay...")
+            # Attempt 2: Wait for file locks to release, then retry
+            time.sleep(0.5)
+            try:
+                shutil.rmtree(dest_path, onexc=_force_remove_readonly)
+            except Exception:
+                # Attempt 3: OS-level forced removal (Windows)
+                logger.warning("Falling back to OS-level removal...")
+                try:
+                    subprocess.run(
+                        ["cmd", "/c", "rmdir", "/s", "/q", dest_path],
+                        check=True, capture_output=True, timeout=15
+                    )
+                except Exception as e2:
+                    raise RuntimeError(
+                        f"Failed to clean up existing directory '{dest_path}': {e2}"
+                    ) from e2
+                    
     os.makedirs(dest_path, exist_ok=True)
     git.Repo.clone_from(repo_url, dest_path, depth=1)
     return dest_path

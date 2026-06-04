@@ -292,16 +292,40 @@ class GeneratorAgent(BaseAgent):
         run_cmd_json = json.dumps(run_cmd_list)
         
         if lang == "node":
-            dockerfile = f"""FROM node:20-alpine AS builder
+            has_build = bool(analysis.build_steps)
+            # Detect if the project uses Vite (output dir is 'dist') vs CRA/others (output dir is 'build')
+            framework = (analysis.framework or "").lower()
+            uses_vite = "vite" in " ".join(analysis.dependencies).lower()
+            output_dir = "dist" if uses_vite else "build"
+
+            if has_build:
+                # Multi-stage: install ALL deps (including devDependencies for build tools like Vite),
+                # run the build, then copy only the output into a slim production image.
+                build_steps_str = chr(10).join([f"RUN {step}" for step in analysis.build_steps])
+                dockerfile = f"""FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+{build_steps_str}
+
+FROM node:20-alpine
+WORKDIR /app
+RUN npm install -g serve
+COPY --from=builder /app/{output_dir}/ ./static
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup && chown -R appuser:appgroup /app
+USER appuser
+EXPOSE {port}
+ENV PORT={port}
+CMD ["serve", "-s", "static", "-l", "{port}"]
+"""
+            else:
+                # No build step — just copy everything and run
+                dockerfile = f"""FROM node:20-alpine
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production || npm install --only=production
 COPY . .
-{chr(10).join([f"RUN {step}" for step in analysis.build_steps])}
-
-FROM node:20-alpine
-WORKDIR /app
-COPY --from=builder /app /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup && chown -R appuser:appgroup /app
 USER appuser
 EXPOSE {port}
@@ -391,21 +415,63 @@ class DebuggerAgent(BaseAgent):
         )
 
         if not self.client:
-            logger.warning("GROQ_API_KEY not set. Debugger agent will return the original Dockerfile with a mock description.")
-            return DebuggerResult(
-                dockerfile=dockerfile,
-                root_cause="LLM Debugger not active (missing GROQ_API_KEY)",
-                fix_explanation="No modifications applied because the LLM is inactive."
-            )
+            logger.warning("GROQ_API_KEY not set. Running rule-based Debugger fallback.")
+            return self._fallback_debug(dockerfile, build_errors)
 
         try:
             result_json = self._call_llm(system_prompt, user_prompt, DebuggerResult)
             return DebuggerResult.model_validate(result_json)
         except Exception as e:
-            logger.error(f"DebuggerAgent LLM call failed: {e}")
-            # Safe fallback
-            return DebuggerResult(
-                dockerfile=dockerfile,
-                root_cause=f"Error in LLM call: {str(e)}",
-                fix_explanation="Failed to contact debugger LLM. Returning original Dockerfile."
-            )
+            logger.error(f"DebuggerAgent LLM call failed, falling back to rule-based: {e}")
+            return self._fallback_debug(dockerfile, build_errors)
+
+    def _fallback_debug(self, dockerfile: str, build_errors: str) -> DebuggerResult:
+        build_errors_lower = build_errors.lower()
+        root_cause = "Unknown build failure"
+        fix_explanation = "No automatic fix matches found."
+        corrected_dockerfile = dockerfile
+        
+        # Rule 1: COPY failed: stat app/build/: file does not exist
+        # Also handle the root cause: devDependencies not installed (build tools like Vite missing)
+        if "stat app/build/" in build_errors_lower or "stat /app/build" in build_errors_lower or ("build/" in build_errors_lower and "does not exist" in build_errors_lower):
+            root_cause = "The COPY instruction failed because the build output directory is named 'dist' instead of 'build', or build tools (devDependencies) were not installed."
+            fix_explanation = "Replaced '/app/build' with '/app/dist' and ensured full dependency installation (npm ci without --only=production)."
+            corrected_dockerfile = dockerfile.replace("/app/build/", "/app/dist/").replace("/app/build", "/app/dist")
+            # Also fix --only=production which prevents build tools from being installed
+            corrected_dockerfile = corrected_dockerfile.replace("npm ci --only=production", "npm ci").replace("npm install --only=production", "npm install")
+            
+        elif "stat app/dist/" in build_errors_lower or "stat /app/dist" in build_errors_lower or ("dist/" in build_errors_lower and "does not exist" in build_errors_lower):
+            root_cause = "The COPY instruction failed because the build output directory is named 'build' instead of 'dist', or build tools (devDependencies) were not installed."
+            fix_explanation = "Replaced '/app/dist' with '/app/build' and ensured full dependency installation (npm ci without --only=production)."
+            corrected_dockerfile = dockerfile.replace("/app/dist/", "/app/build/").replace("/app/dist", "/app/build")
+            # Also fix --only=production which prevents build tools from being installed
+            corrected_dockerfile = corrected_dockerfile.replace("npm ci --only=production", "npm ci").replace("npm install --only=production", "npm install")
+            
+        # Rule 2: pip install failure due to missing build dependencies (gcc, etc.)
+        elif ("gcc" in build_errors_lower or "clang" in build_errors_lower or "error: command 'gcc' failed" in build_errors_lower) and "python" in dockerfile.lower():
+            root_cause = "Some Python packages require compilation tools (gcc, build-essential, python3-dev) which are missing in the base slim/alpine image."
+            fix_explanation = "Injected compiler tools installation instructions prior to package installs."
+            if "alpine" in dockerfile.lower():
+                corrected_dockerfile = dockerfile.replace("RUN pip install", "RUN apk add --no-cache gcc musl-dev python3-dev && RUN pip install")
+            else:
+                lines = dockerfile.split("\n")
+                inserted = False
+                for idx, line in enumerate(lines):
+                    if "copy requirements" in line.lower() or ("copy" in line.lower() and "requirements.txt" in line.lower()):
+                        lines.insert(idx, "RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev build-essential && rm -rf /var/lib/apt/lists/*")
+                        inserted = True
+                        break
+                if inserted:
+                    corrected_dockerfile = "\n".join(lines)
+                    
+        # Rule 3: npm/yarn install missing packages
+        elif "npm err! code elifecycle" in build_errors_lower or "npm err! missing script: build" in build_errors_lower:
+            root_cause = "The build stage failed because of an npm error or missing build script."
+            fix_explanation = "Removed the 'npm run build' script execution from the Dockerfile build process."
+            corrected_dockerfile = dockerfile.replace("RUN npm run build", "# RUN npm run build")
+            
+        return DebuggerResult(
+            dockerfile=corrected_dockerfile,
+            root_cause=root_cause,
+            fix_explanation=fix_explanation
+        )
