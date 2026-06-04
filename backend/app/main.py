@@ -6,7 +6,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from app.utils import get_repo_temp_path, clone_repository, generate_file_tree, get_manifest_contents, truncate_docker_logs
+from app.utils import get_repo_temp_path, clone_repository, generate_file_tree, get_manifest_contents, truncate_docker_logs, rmtree_compat
 from app.agents import AnalyzerAgent, GeneratorAgent, DebuggerAgent, AnalysisResult
 from app.docker_ops import build_docker_image, verify_container_startup, BuildError
 
@@ -271,7 +271,7 @@ async def websocket_endpoint(websocket: WebSocket):
         if active_temp_path and os.path.exists(active_temp_path):
             logger.info(f"Cleaning up repository folder: {active_temp_path}")
             try:
-                shutil.rmtree(active_temp_path, onexc=lambda func, path, exc_info: os.chmod(path, 0o777) or shutil.rmtree(path))
+                rmtree_compat(active_temp_path, lambda func, path, exc_info: os.chmod(path, 0o777) or shutil.rmtree(path))
             except Exception as clean_err:
                 logger.error(f"Failed to delete repository temp path: {clean_err}")
 

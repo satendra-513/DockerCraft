@@ -8,7 +8,16 @@ import logging
 from typing import Dict, List
 import git
 
+import sys
+
 logger = logging.getLogger("dockercraft.utils")
+
+def rmtree_compat(path: str, handler):
+    """Compatibility wrapper for shutil.rmtree across python 3.11 and 3.12+."""
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=handler)
+    else:
+        shutil.rmtree(path, onerror=handler)
 
 def get_repo_temp_path(repo_url: str) -> str:
     """Generate a unique temporary path for a repository URL."""
@@ -28,13 +37,13 @@ def clone_repository(repo_url: str, dest_path: str) -> str:
     if os.path.exists(dest_path):
         # Attempt 1: shutil.rmtree with read-only file handler
         try:
-            shutil.rmtree(dest_path, onexc=_force_remove_readonly)
+            rmtree_compat(dest_path, _force_remove_readonly)
         except Exception as e:
             logger.warning(f"shutil.rmtree failed: {e}. Retrying after brief delay...")
             # Attempt 2: Wait for file locks to release, then retry
             time.sleep(0.5)
             try:
-                shutil.rmtree(dest_path, onexc=_force_remove_readonly)
+                rmtree_compat(dest_path, _force_remove_readonly)
             except Exception:
                 # Attempt 3: OS-level forced removal
                 logger.warning("Falling back to OS-level removal...")
