@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  dockercraft:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dockercraft:latest
+    container_name: dockercraft-app
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount host's docker socket to allow DockerCraft to build and run test containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # API Key for the LLM agents (FastAPI app reads this)
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+    restart: unless-stopped

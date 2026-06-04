@@ -268,3 +268,18 @@ async def websocket_endpoint(websocket: WebSocket):
                 shutil.rmtree(active_temp_path, onexc=lambda func, path, exc_info: os.chmod(path, 0o777) or shutil.rmtree(path))
             except Exception as clean_err:
                 logger.error(f"Failed to delete repository temp path: {clean_err}")
+
+from fastapi.staticfiles import StaticFiles
+
+# Mount static files to serve the frontend on the root URL path
+frontend_dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))
+static_dir_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
+
+if os.path.exists(frontend_dist_path):
+    logger.info(f"Serving frontend from {frontend_dist_path}")
+    app.mount("/", StaticFiles(directory=frontend_dist_path, html=True), name="static")
+elif os.path.exists(static_dir_path):
+    logger.info(f"Serving frontend from {static_dir_path}")
+    app.mount("/", StaticFiles(directory=static_dir_path, html=True), name="static")
+else:
+    logger.warning("Frontend static build directory not found. Serving API routes only.")

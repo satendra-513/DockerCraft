@@ -8,6 +8,28 @@ It is built as a **Client-Server Web Application** utilizing a **FastAPI backend
 
 ## 🛠️ Architectural Overview
 
+DockerCraft operates on a decoupled client-server architecture coordinating a specialized multi-agent pipeline:
+
+```mermaid
+graph TD
+    User([User]) <-->|WebSockets / HTTP| Frontend[Vite Frontend Dashboard]
+    subgraph FastAPI Backend
+        Frontend <-->|Real-time Pipeline Logs & Events| WS[WebSocket Controller]
+        WS -->|Trigger Pipeline| Manager[Orchestrator Engine]
+        Manager -->|1. Clone Repo| Git[Git Cloner]
+        Manager -->|2. Scan File Tree & Manifests| Analyzer[Analyzer Agent]
+        Manager -->|3. Generate Initial Dockerfile| Generator[Generator Agent]
+        Manager -->|4. Test & Repair Build (Max 3 retries)| Debugger[Debugger Agent]
+        Manager -->|5. Verify Container Startup| Verifier[Container Verifier]
+    end
+    subgraph Host / Docker Daemon
+        Verifier -->|docker run| DockerD[(Docker Daemon)]
+        Generator -.->|docker build| DockerD
+    end
+```
+
+### Components
+
 * **Interactive Web Dashboard:** A responsive single-page web panel with pipeline progress visualization (stepper timeline), interactive side-by-side workspace (editable Dockerfile pane + live terminal logs), and project metadata card displays.
 * **FastAPI Backend:** Communicates with the Docker daemon using the Docker Python SDK, manages git cloning with GitPython, and coordinates the LLM Multi-Agent system.
 * **Multi-Agent Pipeline:** Coordinated state-machine utilizing three specialized LLM agents communicating with Pydantic schemas:
@@ -57,6 +79,34 @@ npm install
 npm run dev
 ```
 The Vite development server will run on `http://localhost:5173`. Open your browser and go to `http://localhost:5173`.
+
+### 3. Running with Docker (Recommended)
+
+Since the project is fully Dockerized, you can launch DockerCraft in a single command using Docker Compose:
+
+```bash
+# Set your Groq API Key (optional)
+export GROQ_API_KEY="your_api_key_here"  # Windows PowerShell: $env:GROQ_API_KEY="your_api_key_here"
+
+# Build and start the container
+docker compose up --build
+```
+
+Or run it using the Docker CLI directly:
+
+```bash
+# Build the unified container
+docker build -t dockercraft:latest .
+
+# Run the container (mounting the docker socket is required)
+docker run -d -p 8000:8000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e GROQ_API_KEY \
+  --name dockercraft-app \
+  dockercraft:latest
+```
+
+The application will be served at `http://localhost:8000`.
 
 ---
 
