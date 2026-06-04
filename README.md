@@ -5,27 +5,35 @@ DockerCraft is an AI-powered developer tool that analyzes Git repositories, gene
 It is built as a **Client-Server Web Application** utilizing a **FastAPI backend** and a beautiful **glassmorphic Vite/Vanilla JS web dashboard** with real-time log streaming over WebSockets.
 
 ---
-
-## 🛠️ Architectural Overview
-
-DockerCraft operates on a decoupled client-server architecture coordinating a specialized multi-agent pipeline:
+## 🏗️ High-Level Architecture Overview
 
 ```mermaid
-graph TD
-    User([User]) <-->|WebSockets / HTTP| Frontend[Vite Frontend Dashboard]
-    subgraph FastAPI Backend
-        Frontend <-->|Real-time Pipeline Logs & Events| WS[WebSocket Controller]
-        WS -->|Trigger Pipeline| Manager[Orchestrator Engine]
-        Manager -->|1. Clone Repo| Git[Git Cloner]
-        Manager -->|2. Scan File Tree & Manifests| Analyzer[Analyzer Agent]
-        Manager -->|3. Generate Initial Dockerfile| Generator[Generator Agent]
-        Manager -->|4. Test & Repair Build (Max 3 retries)| Debugger[Debugger Agent]
-        Manager -->|5. Verify Container Startup| Verifier[Container Verifier]
-    end
-    subgraph Host / Docker Daemon
-        Verifier -->|docker run| DockerD[(Docker Daemon)]
-        Generator -.->|docker build| DockerD
-    end
+flowchart LR
+
+    User([👤 User])
+
+    Frontend[🌐 Web Dashboard]
+
+    Orchestrator[🧠 DockerCraft Engine]
+
+    Analyze[🔍 Analyze Repository]
+
+    Generate[⚙️ Generate Container Setup]
+
+    Validate[✅ Validate & Improve]
+
+    Deploy[🚀 Ready-to-Run Container]
+
+    User --> Frontend
+    Frontend --> Orchestrator
+
+    Orchestrator --> Analyze
+    Analyze --> Generate
+    Generate --> Validate
+    Validate --> Deploy
+
+    Deploy --> Frontend
+    Frontend --> User
 ```
 
 ### Components
