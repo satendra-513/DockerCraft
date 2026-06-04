@@ -28,13 +28,19 @@ app.add_middleware(
 class RepoRequest(BaseModel):
     repo_url: str
 
+# Detect frontend static paths
+frontend_dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))
+static_dir_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
+
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "service": "dockercraft"}
 
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to DockerCraft API. Connect to /ws/stream via WebSockets to stream pipelines."}
+# Only define fallback root route if static frontend files are not present
+if not (os.path.exists(frontend_dist_path) or os.path.exists(static_dir_path)):
+    @app.get("/")
+    def read_root():
+        return {"message": "Welcome to DockerCraft API. Connect to /ws/stream via WebSockets to stream pipelines."}
 
 
 @app.websocket("/ws/stream")
@@ -270,10 +276,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 logger.error(f"Failed to delete repository temp path: {clean_err}")
 
 from fastapi.staticfiles import StaticFiles
-
-# Mount static files to serve the frontend on the root URL path
-frontend_dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))
-static_dir_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
 
 if os.path.exists(frontend_dist_path):
     logger.info(f"Serving frontend from {frontend_dist_path}")
